@@ -6,7 +6,14 @@ import json
 
 CATEGORIES = ["技术动态", "产品发布", "研究进展", "行业资讯", "其他"]
 
-client = AsyncOpenAI(api_key=env_config.openai_api_key)
+_client: AsyncOpenAI | None = None
+
+
+def get_client() -> AsyncOpenAI:
+    global _client
+    if _client is None:
+        _client = AsyncOpenAI(api_key=env_config.openai_api_key)
+    return _client
 
 
 async def process_article(article: ArticleData) -> tuple[str, str]:
@@ -27,6 +34,7 @@ async def process_article(article: ArticleData) -> tuple[str, str]:
 """
 
     try:
+        client = get_client()
         response = await client.chat.completions.create(
             model=env_config.ai_model,
             messages=[{"role": "user", "content": prompt}],
