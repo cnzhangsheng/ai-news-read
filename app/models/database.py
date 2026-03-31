@@ -55,15 +55,16 @@ async def init_db() -> None:
         await db.commit()
 
 
-async def get_db() -> aiosqlite.Connection:
-    return await aiosqlite.connect(env_config.database_path)
+def get_db():
+    """返回数据库连接的上下文管理器"""
+    return aiosqlite.connect(env_config.database_path)
 
 
 class SourceDB:
     @staticmethod
     async def create(name: str, type: str, url: str, enabled: bool = True,
                      filter_keywords: list[str] | None = None) -> int:
-        async with await get_db() as db:
+        async with get_db() as db:
             keywords_json = str(filter_keywords) if filter_keywords else None
             await db.execute(
                 "INSERT INTO sources (name, type, url, enabled, filter_keywords) VALUES (?, ?, ?, ?, ?)",
@@ -76,7 +77,7 @@ class SourceDB:
 
     @staticmethod
     async def get_all() -> list[dict[str, Any]]:
-        async with await get_db() as db:
+        async with get_db() as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute("SELECT * FROM sources ORDER BY created_at DESC")
             rows = await cursor.fetchall()
@@ -84,7 +85,7 @@ class SourceDB:
 
     @staticmethod
     async def get_by_id(id: int) -> dict[str, Any] | None:
-        async with await get_db() as db:
+        async with get_db() as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute("SELECT * FROM sources WHERE id = ?", (id,))
             row = await cursor.fetchone()
@@ -92,7 +93,7 @@ class SourceDB:
 
     @staticmethod
     async def get_enabled() -> list[dict[str, Any]]:
-        async with await get_db() as db:
+        async with get_db() as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute("SELECT * FROM sources WHERE enabled = 1")
             rows = await cursor.fetchall()
@@ -100,7 +101,7 @@ class SourceDB:
 
     @staticmethod
     async def update(id: int, **kwargs: Any) -> bool:
-        async with await get_db() as db:
+        async with get_db() as db:
             fields = []
             values = []
             for key, value in kwargs.items():
@@ -119,7 +120,7 @@ class SourceDB:
 
     @staticmethod
     async def delete(id: int) -> bool:
-        async with await get_db() as db:
+        async with get_db() as db:
             await db.execute("DELETE FROM sources WHERE id = ?", (id,))
             await db.commit()
             return True
@@ -130,7 +131,7 @@ class ArticleDB:
     async def create(source_id: int, title: str, link: str, summary: str | None = None,
                      content: str | None = None, published_at: datetime | None = None,
                      title_hash: str | None = None, is_duplicate: bool = False) -> int | None:
-        async with await get_db() as db:
+        async with get_db() as db:
             try:
                 await db.execute(
                     """INSERT INTO articles
@@ -147,7 +148,7 @@ class ArticleDB:
 
     @staticmethod
     async def update_ai_fields(id: int, ai_summary: str, category: str) -> bool:
-        async with await get_db() as db:
+        async with get_db() as db:
             await db.execute(
                 "UPDATE articles SET ai_summary = ?, category = ? WHERE id = ?",
                 (ai_summary, category, id)
@@ -158,7 +159,7 @@ class ArticleDB:
     @staticmethod
     async def get_list(page: int = 1, page_size: int = 20, category: str | None = None,
                        source_id: int | None = None) -> tuple[list[dict[str, Any]], int]:
-        async with await get_db() as db:
+        async with get_db() as db:
             db.row_factory = aiosqlite.Row
             offset = (page - 1) * page_size
 
@@ -189,7 +190,7 @@ class ArticleDB:
 
     @staticmethod
     async def get_by_id(id: int) -> dict[str, Any] | None:
-        async with await get_db() as db:
+        async with get_db() as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute(
                 """SELECT a.*, s.name as source_name FROM articles a
@@ -201,7 +202,7 @@ class ArticleDB:
 
     @staticmethod
     async def get_categories() -> list[str]:
-        async with await get_db() as db:
+        async with get_db() as db:
             cursor = await db.execute(
                 "SELECT DISTINCT category FROM articles WHERE category IS NOT NULL AND is_duplicate = 0"
             )
@@ -210,7 +211,7 @@ class ArticleDB:
 
     @staticmethod
     async def get_title_hashes(source_id: int, limit: int = 100) -> list[str]:
-        async with await get_db() as db:
+        async with get_db() as db:
             cursor = await db.execute(
                 "SELECT title_hash FROM articles WHERE source_id = ? AND title_hash IS NOT NULL ORDER BY fetched_at DESC LIMIT ?",
                 (source_id, limit)
@@ -223,7 +224,7 @@ class FetchLogDB:
     @staticmethod
     async def create(source_id: int, status: str, articles_count: int = 0,
                      error_message: str | None = None) -> int:
-        async with await get_db() as db:
+        async with get_db() as db:
             await db.execute(
                 "INSERT INTO fetch_logs (source_id, status, articles_count, error_message) VALUES (?, ?, ?, ?)",
                 (source_id, status, articles_count, error_message)
@@ -235,7 +236,7 @@ class FetchLogDB:
 
     @staticmethod
     async def get_recent(limit: int = 50) -> list[dict[str, Any]]:
-        async with await get_db() as db:
+        async with get_db() as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute(
                 """SELECT l.*, s.name as source_name FROM fetch_logs l
