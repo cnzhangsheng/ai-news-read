@@ -11,11 +11,17 @@
         header { background: #1a1a2e; color: white; padding: 20px; margin-bottom: 20px; }
         header h1 { font-size: 24px; }
         .stats { display: flex; gap: 20px; margin-top: 10px; font-size: 14px; color: #aaa; }
+        .nav { display: flex; gap: 10px; margin-bottom: 20px; }
+        .nav button { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; background: #e0e0e0; }
+        .nav button.active { background: #1a1a2e; color: white; }
         .controls { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
-        select, button { padding: 10px 15px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; }
-        button { background: #1a1a2e; color: white; cursor: pointer; }
+        select, button, input { padding: 10px 15px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; }
+        button { background: #1a1a2e; color: white; cursor: pointer; border: none; }
         button:hover { background: #16213e; }
         button:disabled { background: #ccc; cursor: not-allowed; }
+        .btn-danger { background: #f44336; }
+        .btn-danger:hover { background: #d32f2f; }
+        .btn-small { padding: 5px 10px; font-size: 12px; }
         .articles { display: grid; gap: 15px; }
         .article { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .article-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
@@ -29,8 +35,27 @@
         .empty { text-align: center; padding: 40px; color: #888; }
         .pagination { display: flex; justify-content: center; gap: 10px; margin-top: 20px; }
         .pagination button { min-width: 40px; }
-        .refresh-status { position: fixed; top: 20px; right: 20px; background: #4caf50; color: white; padding: 10px 20px; border-radius: 5px; display: none; }
-        .refresh-status.error { background: #f44336; }
+
+        /* 源管理面板 */
+        .panel { display: none; }
+        .panel.active { display: block; }
+        .source-card { background: white; padding: 15px 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+        .source-info h3 { font-size: 16px; margin-bottom: 5px; }
+        .source-info p { font-size: 12px; color: #888; }
+        .source-info .type { background: #e8f5e9; color: #388e3c; padding: 2px 8px; border-radius: 4px; font-size: 11px; margin-left: 10px; }
+        .source-info .disabled-tag { background: #ffebee; color: #c62828; padding: 2px 8px; border-radius: 4px; font-size: 11px; margin-left: 5px; }
+        .source-actions { display: flex; gap: 5px; }
+
+        /* 添加源表单 */
+        .add-form { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .add-form h3 { margin-bottom: 15px; }
+        .form-row { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+        .form-row input, .form-row select { flex: 1; min-width: 150px; }
+        .form-row label { display: flex; align-items: center; gap: 5px; }
+
+        /* Toast */
+        .toast { position: fixed; top: 20px; right: 20px; background: #4caf50; color: white; padding: 10px 20px; border-radius: 5px; display: none; z-index: 1000; }
+        .toast.error { background: #f44336; }
     </style>
 </head>
 <body>
@@ -40,29 +65,74 @@
     </header>
 
     <div class="container">
-        <div class="controls">
-            <select id="categoryFilter">
-                <option value="">全部分类</option>
-            </select>
-            <select id="sourceFilter">
-                <option value="">全部来源</option>
-            </select>
-            <button onclick="fetchNews()">🔄 刷新</button>
-            <button onclick="triggerFetch()" id="fetchBtn">📥 抓取最新</button>
+        <div class="nav">
+            <button class="active" onclick="showPanel('articles')" id="navArticles">📰 新闻列表</button>
+            <button onclick="showPanel('sources')" id="navSources">📋 订阅源管理</button>
         </div>
 
-        <div id="articles" class="articles">
-            <div class="loading">加载中...</div>
+        <!-- 新闻列表面板 -->
+        <div class="panel active" id="articlesPanel">
+            <div class="controls">
+                <select id="categoryFilter">
+                    <option value="">全部分类</option>
+                </select>
+                <select id="sourceFilter">
+                    <option value="">全部来源</option>
+                </select>
+                <button onclick="fetchNews()">🔄 刷新</button>
+                <button onclick="triggerFetch()" id="fetchBtn">📥 抓取最新</button>
+            </div>
+            <div id="articles" class="articles">
+                <div class="loading">加载中...</div>
+            </div>
+            <div class="pagination" id="pagination"></div>
         </div>
 
-        <div class="pagination" id="pagination"></div>
+        <!-- 订阅源管理面板 -->
+        <div class="panel" id="sourcesPanel">
+            <div class="add-form">
+                <h3>➕ 添加订阅源</h3>
+                <div class="form-row">
+                    <input type="text" id="newName" placeholder="名称（如：openai_blog）">
+                    <select id="newType">
+                        <option value="rss">RSS</option>
+                        <option value="twitter">Twitter/X (RSSHub)</option>
+                        <option value="infoq">InfoQ</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <input type="text" id="newUrl" placeholder="RSS URL（如：https://example.com/feed.xml）" style="flex: 2;">
+                </div>
+                <div class="form-row">
+                    <label><input type="checkbox" id="newEnabled" checked> 启用</label>
+                    <button onclick="addSource()">添加</button>
+                </div>
+            </div>
+            <div id="sourcesList"></div>
+        </div>
     </div>
 
-    <div class="refresh-status" id="refreshStatus"></div>
+    <div class="toast" id="toast"></div>
 
     <script>
         let currentPage = 1;
         const pageSize = 20;
+
+        function showPanel(name) {
+            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+            document.getElementById(name + 'Panel').classList.add('active');
+            document.getElementById('nav' + name.charAt(0).toUpperCase() + name.slice(1)).classList.add('active');
+            if (name === 'sources') loadSourcesList();
+        }
+
+        function showToast(msg, isError = false) {
+            const el = document.getElementById('toast');
+            el.textContent = msg;
+            el.className = isError ? 'toast error' : 'toast';
+            el.style.display = 'block';
+            setTimeout(() => el.style.display = 'none', 3000);
+        }
 
         async function loadStatus() {
             try {
@@ -82,6 +152,7 @@
                 const res = await fetch('/api/categories');
                 const data = await res.json();
                 const select = document.getElementById('categoryFilter');
+                select.innerHTML = '<option value="">全部分类</option>';
                 data.categories.forEach(cat => {
                     const opt = document.createElement('option');
                     opt.value = cat;
@@ -91,11 +162,12 @@
             } catch (e) {}
         }
 
-        async function loadSources() {
+        async function loadSourceFilter() {
             try {
                 const res = await fetch('/api/sources');
                 const data = await res.json();
                 const select = document.getElementById('sourceFilter');
+                select.innerHTML = '<option value="">全部来源</option>';
                 data.sources.forEach(src => {
                     const opt = document.createElement('option');
                     opt.value = src.id;
@@ -103,6 +175,116 @@
                     select.appendChild(opt);
                 });
             } catch (e) {}
+        }
+
+        async function loadSourcesList() {
+            try {
+                const res = await fetch('/api/sources');
+                const data = await res.json();
+                const container = document.getElementById('sourcesList');
+
+                if (data.sources.length === 0) {
+                    container.innerHTML = '<div class="empty">暂无订阅源，请添加</div>';
+                    return;
+                }
+
+                let html = '';
+                data.sources.forEach(src => {
+                    html += `
+                        <div class="source-card">
+                            <div class="source-info">
+                                <h3>${escapeHtml(src.name)} <span class="type">${src.type}</span>
+                                ${!src.enabled ? '<span class="disabled-tag">已禁用</span>' : ''}</h3>
+                                <p>${escapeHtml(src.url)}</p>
+                            </div>
+                            <div class="source-actions">
+                                <button class="btn-small" onclick="toggleSource(${src.id}, ${!src.enabled})">${src.enabled ? '禁用' : '启用'}</button>
+                                <button class="btn-small" onclick="fetchOne(${src.id})">抓取</button>
+                                <button class="btn-small btn-danger" onclick="deleteSource(${src.id})">删除</button>
+                            </div>
+                        </div>
+                    `;
+                });
+                container.innerHTML = html;
+            } catch (e) {
+                document.getElementById('sourcesList').innerHTML = '<div class="empty">加载失败</div>';
+            }
+        }
+
+        async function addSource() {
+            const name = document.getElementById('newName').value.trim();
+            const type = document.getElementById('newType').value;
+            const url = document.getElementById('newUrl').value.trim();
+            const enabled = document.getElementById('newEnabled').checked;
+
+            if (!name || !url) {
+                showToast('请填写名称和 URL', true);
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/sources', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, type, url, enabled })
+                });
+                if (res.ok) {
+                    showToast('添加成功');
+                    document.getElementById('newName').value = '';
+                    document.getElementById('newUrl').value = '';
+                    loadSourcesList();
+                    loadSourceFilter();
+                    loadStatus();
+                } else {
+                    const err = await res.json();
+                    showToast('添加失败: ' + (err.detail || '未知错误'), true);
+                }
+            } catch (e) {
+                showToast('添加失败', true);
+            }
+        }
+
+        async function toggleSource(id, enable) {
+            try {
+                const res = await fetch(`/api/sources/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled: enable })
+                });
+                if (res.ok) {
+                    showToast(enable ? '已启用' : '已禁用');
+                    loadSourcesList();
+                    loadStatus();
+                }
+            } catch (e) {
+                showToast('操作失败', true);
+            }
+        }
+
+        async function deleteSource(id) {
+            if (!confirm('确定删除此订阅源？')) return;
+            try {
+                const res = await fetch(`/api/sources/${id}`, { method: 'DELETE' });
+                if (res.ok) {
+                    showToast('已删除');
+                    loadSourcesList();
+                    loadSourceFilter();
+                    loadStatus();
+                }
+            } catch (e) {
+                showToast('删除失败', true);
+            }
+        }
+
+        async function fetchOne(id) {
+            showToast('正在抓取...');
+            try {
+                const res = await fetch(`/api/fetch/${id}`, { method: 'POST' });
+                const data = await res.json();
+                showToast(`抓取完成，新文章: ${data.articles_count || 0}`);
+            } catch (e) {
+                showToast('抓取失败', true);
+            }
         }
 
         async function fetchNews(page = 1) {
@@ -145,7 +327,6 @@
                 });
                 document.getElementById('articles').innerHTML = html;
 
-                // 分页
                 const totalPages = Math.ceil(data.total / pageSize);
                 let paginationHtml = '';
                 if (totalPages > 1) {
@@ -156,9 +337,8 @@
                 document.getElementById('pagination').innerHTML = paginationHtml;
 
             } catch (e) {
-                document.getElementById('articles').innerHTML = '<div class="empty">加载失败，请检查服务是否运行</div>';
+                document.getElementById('articles').innerHTML = '<div class="empty">加载失败</div>';
             }
-
             loadStatus();
         }
 
@@ -166,25 +346,16 @@
             const btn = document.getElementById('fetchBtn');
             btn.disabled = true;
             btn.textContent = '⏳ 抓取中...';
-
-            const statusEl = document.getElementById('refreshStatus');
-            statusEl.style.display = 'block';
-            statusEl.textContent = '正在抓取...';
-            statusEl.classList.remove('error');
+            showToast('正在抓取...');
 
             try {
                 const res = await fetch('/api/fetch', { method: 'POST' });
                 const data = await res.json();
-
-                statusEl.textContent = `抓取完成！新文章: ${Object.values(data.results || {}).reduce((a,b) => a+b, 0)}`;
-
-                setTimeout(() => {
-                    statusEl.style.display = 'none';
-                    fetchNews();
-                }, 2000);
+                const total = Object.values(data.results || {}).reduce((a,b) => a+b, 0);
+                showToast(`抓取完成！新文章: ${total}`);
+                setTimeout(() => fetchNews(), 1000);
             } catch (e) {
-                statusEl.textContent = '抓取失败';
-                statusEl.classList.add('error');
+                showToast('抓取失败', true);
             }
 
             btn.disabled = false;
@@ -200,10 +371,9 @@
 
         // 初始化
         loadCategories();
-        loadSources();
+        loadSourceFilter();
         fetchNews();
 
-        // 筛选变化时刷新
         document.getElementById('categoryFilter').addEventListener('change', () => fetchNews(1));
         document.getElementById('sourceFilter').addEventListener('change', () => fetchNews(1));
     </script>
