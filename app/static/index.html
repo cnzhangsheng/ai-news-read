@@ -15,7 +15,7 @@
         .nav button { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; background: #e0e0e0; }
         .nav button.active { background: #1a1a2e; color: white; }
         .controls { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
-        select, button, input { padding: 10px 15px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; }
+        select, button, input, textarea { padding: 10px 15px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; }
         button { background: #1a1a2e; color: white; cursor: pointer; border: none; }
         button:hover { background: #16213e; }
         button:disabled { background: #ccc; cursor: not-allowed; }
@@ -50,8 +50,15 @@
         .add-form { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
         .add-form h3 { margin-bottom: 15px; }
         .form-row { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
-        .form-row input, .form-row select { flex: 1; min-width: 150px; }
+        .form-row input, .form-row select, .form-row textarea { flex: 1; min-width: 150px; }
         .form-row label { display: flex; align-items: center; gap: 5px; }
+        .form-row textarea { min-height: 120px; resize: vertical; font-family: monospace; }
+
+        /* Twitter 批量添加样式 */
+        .twitter-batch { border-left: 4px solid #1da1f2; padding-left: 15px; }
+        .twitter-batch h3 { color: #1da1f2; }
+        .batch-preview { background: #f8f9fa; padding: 10px; border-radius: 5px; margin-top: 10px; font-size: 12px; max-height: 150px; overflow-y: auto; }
+        .batch-preview .user-item { display: inline-block; background: #e3f2fd; color: #1565c0; padding: 3px 8px; border-radius: 3px; margin: 2px; font-size: 12px; }
 
         /* Toast */
         .toast { position: fixed; top: 20px; right: 20px; background: #4caf50; color: white; padding: 10px 20px; border-radius: 5px; display: none; z-index: 1000; }
@@ -90,8 +97,27 @@
 
         <!-- 订阅源管理面板 -->
         <div class="panel" id="sourcesPanel">
+            <!-- 批量添加 Twitter 作者 -->
+            <div class="add-form twitter-batch">
+                <h3>🐦 批量添加 Twitter/X 作者</h3>
+                <p style="font-size: 12px; color: #888; margin-bottom: 10px;">每行一个作者，支持 @用户名 或 用户名 格式</p>
+                <div class="form-row">
+                    <textarea id="twitterUsers" placeholder="@openclaw_ai
+@AnthropicAI
+@ClaudeAI
+@karpathy
+@rowancheung"></textarea>
+                </div>
+                <div class="form-row">
+                    <label><input type="checkbox" id="twitterEnabled" checked> 启用</label>
+                    <button onclick="addTwitterUsers()" id="addTwitterBtn">批量添加</button>
+                </div>
+                <div class="batch-preview" id="twitterPreview" style="display:none;"></div>
+            </div>
+
+            <!-- 单个添加订阅源 -->
             <div class="add-form">
-                <h3>➕ 添加订阅源</h3>
+                <h3>➕ 添加单个订阅源</h3>
                 <div class="form-row">
                     <input type="text" id="newName" placeholder="名称（如：openai_blog）">
                     <select id="newType">
@@ -108,6 +134,7 @@
                     <button onclick="addSource()">添加</button>
                 </div>
             </div>
+
             <div id="sourcesList"></div>
         </div>
     </div>
@@ -132,6 +159,91 @@
             el.className = isError ? 'toast error' : 'toast';
             el.style.display = 'block';
             setTimeout(() => el.style.display = 'none', 3000);
+        }
+
+        // 解析 Twitter 用户名
+        function parseTwitterUsers(text) {
+            const lines = text.split(/[\n,]/);
+            const users = [];
+            for (const line of lines) {
+                let name = line.trim();
+                if (!name) continue;
+                // 移除 @ 前缀
+                if (name.startsWith('@')) name = name.substring(1);
+                // 移除 URL 前缀（如果用户粘贴了完整 URL）
+                name = name.replace(/^https?:\/\/(twitter|x)\.com\//, '');
+                if (name && !users.includes(name)) {
+                    users.push(name);
+                }
+            }
+            return users;
+        }
+
+        // 预览 Twitter 用户
+        document.getElementById('twitterUsers').addEventListener('input', function() {
+            const users = parseTwitterUsers(this.value);
+            const preview = document.getElementById('twitterPreview');
+            if (users.length > 0) {
+                preview.style.display = 'block';
+                preview.innerHTML = '<strong>将添加 ' + users.length + ' 个作者：</strong><br>' +
+                    users.map(u => '<span class="user-item">@' + escapeHtml(u) + '</span>').join('');
+            } else {
+                preview.style.display = 'none';
+            }
+        });
+
+        // 批量添加 Twitter 用户
+        async function addTwitterUsers() {
+            const text = document.getElementById('twitterUsers').value;
+            const enabled = document.getElementById('twitterEnabled').checked;
+            const users = parseTwitterUsers(text);
+
+            if (users.length === 0) {
+                showToast('请输入 Twitter 用户名', true);
+                return;
+            }
+
+            const btn = document.getElementById('addTwitterBtn');
+            btn.disabled = true;
+            btn.textContent = '添加中...';
+
+            let success = 0, failed = 0;
+
+            for (const user of users) {
+                try {
+                    const res = await fetch('/api/sources', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            name: user,
+                            type: 'twitter',
+                            url: `https://rsshub.app/twitter/user/${user}`,
+                            enabled: enabled
+                        })
+                    });
+                    if (res.ok) {
+                        success++;
+                    } else {
+                        failed++;
+                    }
+                } catch (e) {
+                    failed++;
+                }
+            }
+
+            btn.disabled = false;
+            btn.textContent = '批量添加';
+
+            if (success > 0) {
+                showToast(`成功添加 ${success} 个作者${failed > 0 ? '，失败 ' + failed + ' 个' : ''}`);
+                document.getElementById('twitterUsers').value = '';
+                document.getElementById('twitterPreview').style.display = 'none';
+                loadSourcesList();
+                loadSourceFilter();
+                loadStatus();
+            } else {
+                showToast('添加失败，可能已存在', true);
+            }
         }
 
         async function loadStatus() {
