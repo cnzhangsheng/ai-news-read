@@ -1,7 +1,9 @@
 # app/main.py
 from contextlib import asynccontextmanager
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 
 from app.models.database import init_db
 from app.api.routes import router as article_router
@@ -40,6 +42,7 @@ app.include_router(article_router, prefix="/api")
 app.include_router(source_router, prefix="/api")
 
 
-@app.get("/")
+@app.get("/", response_class=HTMLResponse)
 async def root():
-    return {"message": "AI News Aggregator API", "docs": "/docs"}
+    index_path = Path(__file__).parent / "static" / "index.html"
+    return HTMLResponse(content=index_path.read_text(encoding="utf-8"))
